@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -45,7 +45,15 @@ impl PVChannel {
                 })
             }
             Role::Prover => {
-                let stream = TcpStream::connect(addr).await?;
+                let stream = loop {
+                    match TcpStream::connect(&addr).await {
+                        Ok(s) => break s,
+                        Err(e) if e.kind() == tokio::io::ErrorKind::ConnectionRefused => {
+                            tokio::time::sleep(Duration::from_millis(200)).await;
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
+                };
                 Ok(PVChannel {
                     role,
                     stream: Some(stream),
